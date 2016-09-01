@@ -1,0 +1,100 @@
+Shader "Unlit/MaxxTest"
+{
+    Properties
+    {
+        _MainTex ("Base (RGB), Alpha (A)", 2D) = "black" {}
+        _SizeX("SizeX", range(1,2048)) = 500//size
+        _SizeY("SizeY", range(1,2048)) = 500//size
+        _EdgeColor ("edgeColor", Color) = (0.16,0.231,0.69,1)
+    }
+    
+    SubShader
+    {
+        Tags
+        {
+            "Queue" = "Transparent"
+            "IgnoreProjector" = "True"
+            "RenderType" = "Transparent"
+        }
+        
+        Pass
+        {
+            Cull Off
+            Lighting Off
+            ZWrite Off
+            Fog { Mode Off }
+            Offset -1, -1
+            Blend SrcAlpha OneMinusSrcAlpha
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #include "UnityCG.cginc"
+
+            sampler2D _MainTex;
+            float _SizeX;
+            float _SizeY;
+            fixed4 _EdgeColor;
+
+            struct appdata_t
+            {
+                float4 vertex : POSITION;
+                float2 texcoord : TEXCOORD0;
+                fixed4 color : COLOR;
+            };
+    
+            struct v2f
+            {
+                float4 vertex : SV_POSITION;
+                half2 texcoord : TEXCOORD0;
+                fixed4 color : COLOR;
+            };
+    
+            v2f o;
+
+            v2f vert (appdata_t v)
+            {
+                o.vertex = mul(UNITY_MATRIX_MVP, v.vertex);
+                o.texcoord = v.texcoord;
+                o.color = v.color;
+                return o;
+            }
+
+            float getGreyValue(float2 POS, fixed OFFSET_X, fixed OFFSET_Y)
+            {
+                fixed4 col = tex2D(_MainTex, POS - fixed2(OFFSET_X / _SizeX, OFFSET_Y / _SizeY));
+                return dot(col.rgb, float3(0.299, 0.587, 0.114));
+                //return dot(col.rgb, float3(0.2125, 0.7154, 0.0721));
+            }
+                
+            fixed4 frag (v2f IN) : SV_Target
+            {
+                float grey00 = getGreyValue(IN.texcoord, -1, -1);
+                float grey01 = getGreyValue(IN.texcoord, 0, -1);
+                float grey02 = getGreyValue(IN.texcoord, 1, -1);
+
+                float grey10 = getGreyValue(IN.texcoord, -1, 0);
+                //float grey11 = getGreyValue(IN.texcoord, 0, 0);
+                float grey12 = getGreyValue(IN.texcoord, 1, 0);
+
+                float grey20 = getGreyValue(IN.texcoord, -1, 1);
+                float grey21 = getGreyValue(IN.texcoord, 0, 1);
+                float grey22 = getGreyValue(IN.texcoord, 1, 1);
+
+                // x方向上的近似导数
+                float ux = grey00 + grey01 * 2 + grey02 - grey20 - grey21 * 2 - grey22;
+                // y方向上的近似导数
+                float uy = grey02 + grey12 * 2 + grey22 - grey00 - grey10 * 2 - grey20;
+
+                //float finalGrey = sqrt(ux * ux + uy * uy);
+                //float th = atan(uy/ux);//灰度方向
+
+                fixed modulus = length(float2(ux, uy));
+                fixed4 realCol = tex2D(_MainTex, IN.texcoord);
+                realCol.rgb += modulus * _EdgeColor.rgb;
+                return realCol;
+            }
+            ENDCG
+        }
+    }
+}
